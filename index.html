@@ -63,7 +63,7 @@
         camera.projectionMatrix.copy(arContext.getProjectionMatrix());
       });
 
-      // --- Marker root ---
+      // --- Marker root with smoothing ---
       const markerRoot = new THREE.Group();
       scene.add(markerRoot);
 
@@ -73,6 +73,10 @@
         {
           type: "pattern",
           patternUrl: "pattern-spider-man-logo.patt",
+          smooth: true,           // enable smoothing
+          smoothCount: 10,        // average last 10 frames
+          smoothTolerance: 0.01,  // ignore tiny jitter
+          smoothThreshold: 0.01,  // update only if movement > threshold
         }
       );
 
@@ -90,14 +94,20 @@
       });
 
       const videoMesh = new THREE.Mesh(geometry, material);
-      videoMesh.rotation.x = -Math.PI / 2; // keep flat
+      videoMesh.position.y = geometry.parameters.height / 2;
 
-      // Flag to know if we've placed it
-      let placed = false;
+      // Force plane flat on marker
+      videoMesh.rotation.x = -Math.PI / 2;
+
+      markerRoot.add(videoMesh);
 
       // --- User interaction to start video ---
       document.body.addEventListener("click", function startVideo() {
-        video.play().catch(err => console.warn("Video play blocked:", err));
+        video.play().then(() => {
+          console.log("Video started");
+        }).catch(err => {
+          console.warn("Video play blocked:", err);
+        });
         document.body.removeEventListener("click", startVideo);
       });
 
@@ -107,17 +117,6 @@
 
         if (arSource.ready) {
           arContext.update(arSource.domElement);
-        }
-
-        // Place mesh once when marker is visible
-        if (!placed && markerRoot.visible) {
-          // copy marker world transform to videoMesh
-          markerRoot.updateMatrixWorld(true);
-          videoMesh.applyMatrix4(markerRoot.matrixWorld);
-          scene.add(videoMesh);
-
-          placed = true; // lock position
-          console.log("Video placed and locked in world space");
         }
 
         renderer.render(scene, camera);
