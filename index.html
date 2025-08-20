@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AR.js Video on Marker</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/build/ar-threex.js"></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Video để hiển thị (ẩn đi, chỉ dùng làm texture) -->
+    <video
+      id="video"
+      src="BigBuckBunny.mp4"
+      autoplay
+      loop
+      muted
+      playsinline
+      style="display: none"
+    ></video>
+
+    <script>
+      // --- Scene, Camera, Renderer ---
+      const scene = new THREE.Scene();
+      const camera = new THREE.Camera();
+      scene.add(camera);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // --- Source webcam ---
+      const arSource = new THREEx.ArToolkitSource({
+        sourceType: "webcam",
+      });
+
+      arSource.init(function () {
+        setTimeout(function () {
+          arSource.onResizeElement();
+          arSource.copyElementSizeTo(renderer.domElement);
+        }, 2000);
+      });
+
+      window.addEventListener("resize", function () {
+        arSource.onResizeElement();
+        arSource.copyElementSizeTo(renderer.domElement);
+      });
+
+      // --- Context AR ---
+      const arContext = new THREEx.ArToolkitContext({
+        cameraParametersUrl: "data/camera_para.dat",
+        detectionMode: "mono",
+      });
+
+      arContext.init(function () {
+        camera.projectionMatrix.copy(arContext.getProjectionMatrix());
+      });
+
+      // --- Marker root ---
+      const markerRoot = new THREE.Group();
+      scene.add(markerRoot);
+
+      const markerControls = new THREEx.ArMarkerControls(
+        arContext,
+        markerRoot,
+        {
+          type: "pattern",
+          patternUrl: "pattern-spider-man-logo.patt",
+        }
+      );
+
+      // --- Video texture ---
+      const video = document.getElementById("video");
+      const videoTexture = new THREE.VideoTexture(video);
+      videoTexture.minFilter = THREE.LinearFilter;
+      videoTexture.magFilter = THREE.LinearFilter;
+      videoTexture.format = THREE.RGBFormat;
+
+      const geometry = new THREE.PlaneGeometry(1, 0.56); // plane tỉ lệ 16:9
+      const material = new THREE.MeshBasicMaterial({
+        map: videoTexture,
+        side: THREE.DoubleSide,
+      });
+
+      const videoMesh = new THREE.Mesh(geometry, material);
+      videoMesh.position.y = geometry.parameters.height / 2; // nâng lên khỏi marker
+      markerRoot.add(videoMesh);
+
+      // --- Animation loop ---
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (arSource.ready) {
+          arContext.update(arSource.domElement);
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+    </script>
+  </body>
+</html>
