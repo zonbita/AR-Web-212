@@ -14,15 +14,16 @@
   </head>
   <body>
     <!-- Hidden video, used as texture -->
-<video
-  id="video"
-  src="BigBuckBunny.mp4"
-  loop
-  muted
-  playsinline
-  autoplay
-  style="display: none"
-></video>
+    <video
+      id="video"
+      src="BigBuckBunny.mp4"
+      loop
+      muted
+      playsinline
+      autoplay
+      webkit-playsinline
+      style="display: none"
+    ></video>
 
     <script>
       // --- Scene, Camera, Renderer ---
@@ -74,15 +75,38 @@
         {
           type: "pattern",
           patternUrl: "pattern-spider-man-logo.patt",
-          smooth: true,           // enable smoothing
-          smoothCount: 10,        // average last 10 frames
-          smoothTolerance: 0.01,  // ignore tiny jitter
-          smoothThreshold: 0.01,  // update only if movement > threshold
+          smooth: true,
+          smoothCount: 10,
+          smoothTolerance: 0.01,
+          smoothThreshold: 0.01,
         }
       );
 
-      // --- Video texture ---
+      // --- Video autoplay handling ---
       const video = document.getElementById("video");
+
+      function tryAutoplay() {
+        video.play().then(() => {
+          console.log("✅ Video autoplayed");
+        }).catch(err => {
+          console.warn("⛔ Autoplay blocked:", err);
+          // fallback: wait for first user gesture
+          const startVideo = () => {
+            video.play().then(() => {
+              console.log("▶️ Video started after tap");
+            });
+            document.body.removeEventListener("click", startVideo);
+            document.body.removeEventListener("touchend", startVideo);
+          };
+          document.body.addEventListener("click", startVideo, { once: true });
+          document.body.addEventListener("touchend", startVideo, { once: true });
+        });
+      }
+
+      // call immediately
+      tryAutoplay();
+
+      // --- Video texture ---
       const videoTexture = new THREE.VideoTexture(video);
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
@@ -96,34 +120,15 @@
 
       const videoMesh = new THREE.Mesh(geometry, material);
       videoMesh.position.y = geometry.parameters.height / 2;
-
-      // Force plane flat on marker
-      videoMesh.rotation.x = -Math.PI / 2;
-
+      videoMesh.rotation.x = -Math.PI / 2; // flat on marker
       markerRoot.add(videoMesh);
 
-      // --- User interaction to start video ---
-// Try autoplay immediately
-video.play().then(() => {
-  console.log("Autoplay started");
-}).catch(err => {
-  console.warn("Autoplay failed, waiting for user gesture", err);
-
-  // fallback: wait for first tap
-  const startVideo = () => {
-    video.play();
-    document.body.removeEventListener("click", startVideo);
-  };
-  document.body.addEventListener("click", startVideo);
-});
       // --- Animation loop ---
       function animate() {
         requestAnimationFrame(animate);
-
         if (arSource.ready) {
           arContext.update(arSource.domElement);
         }
-
         renderer.render(scene, camera);
       }
 
