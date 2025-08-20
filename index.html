@@ -102,15 +102,19 @@
       markerRoot.add(videoMesh);
 
       // --- User interaction to start video ---
-      document.body.addEventListener("click", function startVideo() {
-        video.play().then(() => {
-          console.log("Video started");
-        }).catch(err => {
-          console.warn("Video play blocked:", err);
-        });
-        document.body.removeEventListener("click", startVideo);
-      });
+// Try autoplay immediately
+video.play().then(() => {
+  console.log("Autoplay started");
+}).catch(err => {
+  console.warn("Autoplay failed, waiting for user gesture", err);
 
+  // fallback: wait for first tap
+  const startVideo = () => {
+    video.play();
+    document.body.removeEventListener("click", startVideo);
+  };
+  document.body.addEventListener("click", startVideo);
+});
       // --- Animation loop ---
       function animate() {
         requestAnimationFrame(animate);
