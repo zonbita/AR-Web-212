@@ -13,7 +13,7 @@
     </style>
   </head>
   <body>
-    <!-- Video hidden, used only as texture -->
+    <!-- Hidden video, used as texture -->
     <video
       id="video"
       src="BigBuckBunny.mp4"
@@ -63,7 +63,7 @@
         camera.projectionMatrix.copy(arContext.getProjectionMatrix());
       });
 
-      // --- Marker root ---
+      // --- Marker root with smoothing ---
       const markerRoot = new THREE.Group();
       scene.add(markerRoot);
 
@@ -73,6 +73,10 @@
         {
           type: "pattern",
           patternUrl: "pattern-spider-man-logo.patt",
+          smooth: true,           // enable smoothing
+          smoothCount: 10,        // average last 10 frames
+          smoothTolerance: 0.01,  // ignore tiny jitter
+          smoothThreshold: 0.01,  // update only if movement > threshold
         }
       );
 
@@ -91,6 +95,10 @@
 
       const videoMesh = new THREE.Mesh(geometry, material);
       videoMesh.position.y = geometry.parameters.height / 2;
+
+      // Force plane flat on marker
+      videoMesh.rotation.x = -Math.PI / 2;
+
       markerRoot.add(videoMesh);
 
       // --- User interaction to start video ---
