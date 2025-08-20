@@ -13,61 +13,60 @@
     </style>
   </head>
   <body>
-    <!-- Video để hiển thị (ẩn đi, chỉ dùng làm texture) -->
+    <!-- Video hidden, used only as texture -->
     <video
       id="video"
       src="BigBuckBunny.mp4"
-      autoplay
       loop
       muted
       playsinline
       style="display: none"
     ></video>
- 
+
     <script>
       // --- Scene, Camera, Renderer ---
       const scene = new THREE.Scene();
       const camera = new THREE.Camera();
       scene.add(camera);
- 
+
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
       });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
- 
+
       // --- Source webcam ---
       const arSource = new THREEx.ArToolkitSource({
         sourceType: "webcam",
       });
- 
+
       arSource.init(function () {
         setTimeout(function () {
           arSource.onResizeElement();
           arSource.copyElementSizeTo(renderer.domElement);
         }, 2000);
       });
- 
+
       window.addEventListener("resize", function () {
         arSource.onResizeElement();
         arSource.copyElementSizeTo(renderer.domElement);
       });
- 
+
       // --- Context AR ---
       const arContext = new THREEx.ArToolkitContext({
         cameraParametersUrl: "camera_para.dat",
         detectionMode: "mono",
       });
- 
+
       arContext.init(function () {
         camera.projectionMatrix.copy(arContext.getProjectionMatrix());
       });
- 
+
       // --- Marker root ---
       const markerRoot = new THREE.Group();
       scene.add(markerRoot);
- 
+
       const markerControls = new THREEx.ArMarkerControls(
         arContext,
         markerRoot,
@@ -76,35 +75,45 @@
           patternUrl: "pattern-spider-man-logo.patt",
         }
       );
- 
+
       // --- Video texture ---
       const video = document.getElementById("video");
       const videoTexture = new THREE.VideoTexture(video);
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
       videoTexture.format = THREE.RGBFormat;
- 
-      const geometry = new THREE.PlaneGeometry(1, 0.56); // plane tỉ lệ 16:9
+
+      const geometry = new THREE.PlaneGeometry(1, 0.56); // 16:9 plane
       const material = new THREE.MeshBasicMaterial({
         map: videoTexture,
         side: THREE.DoubleSide,
       });
- 
+
       const videoMesh = new THREE.Mesh(geometry, material);
-      videoMesh.position.y = geometry.parameters.height / 2; // nâng lên khỏi marker
+      videoMesh.position.y = geometry.parameters.height / 2;
       markerRoot.add(videoMesh);
- 
+
+      // --- User interaction to start video ---
+      document.body.addEventListener("click", function startVideo() {
+        video.play().then(() => {
+          console.log("Video started");
+        }).catch(err => {
+          console.warn("Video play blocked:", err);
+        });
+        document.body.removeEventListener("click", startVideo);
+      });
+
       // --- Animation loop ---
       function animate() {
         requestAnimationFrame(animate);
- 
+
         if (arSource.ready) {
           arContext.update(arSource.domElement);
         }
- 
+
         renderer.render(scene, camera);
       }
- 
+
       animate();
     </script>
   </body>
