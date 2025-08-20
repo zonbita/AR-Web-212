@@ -16,7 +16,7 @@
     <!-- Video để hiển thị (ẩn đi, chỉ dùng làm texture) -->
     <video
       id="video"
-      src="video.mp4"
+      src="BigBuckBunny.mp4"
       autoplay
       loop
       muted
@@ -56,7 +56,7 @@
  
       // --- Context AR ---
       const arContext = new THREEx.ArToolkitContext({
-        cameraParametersUrl: "data/camera_para.dat",
+        cameraParametersUrl: "camera_para.dat",
         detectionMode: "mono",
       });
  
@@ -73,7 +73,7 @@
         markerRoot,
         {
           type: "pattern",
-          patternUrl: "data/hiro.patt",
+          patternUrl: "pattern-spider-man-logo.patt",
         }
       );
  
