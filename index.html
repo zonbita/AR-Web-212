@@ -2,28 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>AR.js Video on Marker</title>
+    <title>AR.js GLB Model on Marker</title>
     <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/build/ar-threex.js"></script>
     <style>
       body {
         margin: 0;
         overflow: hidden;
+        font-family: Arial, sans-serif;
+      }
+      
+      #loading {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: white;
+        background: rgba(0,0,0,0.7);
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 100;
+      }
+      
+      #instructions {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        background: rgba(0,0,0,0.7);
+        padding: 15px;
+        border-radius: 5px;
+        text-align: center;
+        max-width: 300px;
       }
     </style>
   </head>
   <body>
-    <!-- Hidden video, used as texture -->
-    <video
-      id="video"
-      src="BigBuckBunny.mp4"
-      loop
-      muted
-      playsinline
-      autoplay
-      webkit-playsinline
-      style="display: none"
-    ></video>
+    <div id="loading">Loading AR...</div>
+    <div id="instructions">Point camera at marker to see 3D model</div>
 
     <script>
       // --- Scene, Camera, Renderer ---
@@ -36,7 +53,21 @@
         alpha: true,
       });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       document.body.appendChild(renderer.domElement);
+
+      // Add ambient light for better visibility
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      // Add directional light with shadows
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(0, 2, 1);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.width = 2048;
+      directionalLight.shadow.mapSize.height = 2048;
+      scene.add(directionalLight);
 
       // --- Source webcam ---
       const arSource = new THREEx.ArToolkitSource({
@@ -47,6 +78,7 @@
         setTimeout(function () {
           arSource.onResizeElement();
           arSource.copyElementSizeTo(renderer.domElement);
+          document.getElementById("loading").textContent = "AR Ready - Point at marker";
         }, 2000);
       });
 
@@ -82,57 +114,125 @@
         }
       );
 
-      // --- Video autoplay handling ---
-      const video = document.getElementById("video");
+      // --- GLB Model Loading ---
+      const loader = new THREE.GLTFLoader();
+      let model = null;
+      let modelMixer = null;
 
-      function tryAutoplay() {
-        video.play().then(() => {
-          console.log("✅ Video autoplayed");
-        }).catch(err => {
-          console.warn("⛔ Autoplay blocked:", err);
-          // fallback: wait for first user gesture
-          const startVideo = () => {
-            video.play().then(() => {
-              console.log("▶️ Video started after tap");
-            });
-            document.body.removeEventListener("click", startVideo);
-            document.body.removeEventListener("touchend", startVideo);
-          };
-          document.body.addEventListener("click", startVideo, { once: true });
-          document.body.addEventListener("touchend", startVideo, { once: true });
-        });
-      }
+      // Replace 'your-model.glb' with your actual GLB file path
+      const modelPath = "your-model.glb"; // Change this to your GLB file path
 
-      // call immediately
-      tryAutoplay();
+      loader.load(
+        modelPath,
+        function (gltf) {
+          model = gltf.scene;
+          
+          // Scale the model (adjust as needed)
+          model.scale.set(0.5, 0.5, 0.5);
+          
+          // Position the model (adjust as needed)
+          model.position.set(0, 0, 0);
+          
+          // Rotate the model if needed
+          model.rotation.x = 0;
+          model.rotation.y = 0;
+          model.rotation.z = 0;
+          
+          // Enable shadows
+          model.traverse(function (child) {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              // Ensure materials are visible
+              if (child.material) {
+                child.material.needsUpdate = true;
+              }
+            }
+          });
 
-      // --- Video texture ---
-      const videoTexture = new THREE.VideoTexture(video);
-      videoTexture.minFilter = THREE.LinearFilter;
-      videoTexture.magFilter = THREE.LinearFilter;
-      videoTexture.format = THREE.RGBFormat;
+          // Add animations if they exist
+          if (gltf.animations && gltf.animations.length > 0) {
+            modelMixer = new THREE.AnimationMixer(model);
+            const action = modelMixer.clipAction(gltf.animations[0]);
+            action.play();
+          }
 
-      const geometry = new THREE.PlaneGeometry(1, 0.56); // 16:9 plane
-      const material = new THREE.MeshBasicMaterial({
-        map: videoTexture,
-        side: THREE.DoubleSide,
-      });
-
-      const videoMesh = new THREE.Mesh(geometry, material);
-      videoMesh.position.y = geometry.parameters.height / 2;
-      videoMesh.rotation.x = -Math.PI / 2; // flat on marker
-      markerRoot.add(videoMesh);
+          markerRoot.add(model);
+          document.getElementById("loading").textContent = "Model loaded successfully!";
+          
+          setTimeout(() => {
+            document.getElementById("loading").style.display = "none";
+          }, 2000);
+        },
+        function (progress) {
+          const percent = Math.round((progress.loaded / progress.total) * 100);
+          document.getElementById("loading").textContent = `Loading model: ${percent}%`;
+        },
+        function (error) {
+          console.error('Error loading GLB model:', error);
+          document.getElementById("loading").textContent = "Error loading model";
+          document.getElementById("loading").style.color = "#ff6b6b";
+          
+          // Create a fallback cube if model fails to load
+          const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+          const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+          const cube = new THREE.Mesh(geometry, material);
+          cube.position.y = 0.15;
+          cube.castShadow = true;
+          cube.receiveShadow = true;
+          markerRoot.add(cube);
+        }
+      );
 
       // --- Animation loop ---
+      const clock = new THREE.Clock();
+      
       function animate() {
         requestAnimationFrame(animate);
+        
+        const delta = clock.getDelta();
+        
+        // Update animation mixer if it exists
+        if (modelMixer) {
+          modelMixer.update(delta);
+        }
+        
+        // Update AR
         if (arSource.ready) {
           arContext.update(arSource.domElement);
         }
+        
         renderer.render(scene, camera);
       }
 
       animate();
+
+      // --- Optional: Add controls for model manipulation ---
+      let isModelVisible = false;
+      
+      // Track marker visibility
+      markerControls.addEventListener('markerFound', function() {
+        isModelVisible = true;
+        console.log('Marker found - Model should be visible');
+      });
+      
+      markerControls.addEventListener('markerLost', function() {
+        isModelVisible = false;
+        console.log('Marker lost - Model hidden');
+      });
+
+      // Optional: Add click handler to scale model
+      document.addEventListener('click', function(event) {
+        if (isModelVisible && model) {
+          // Cycle through different scales on click
+          const currentScale = model.scale.x;
+          if (currentScale < 0.8) {
+            model.scale.set(0.8, 0.8, 0.8);
+          } else {
+            model.scale.set(0.3, 0.3, 0.3);
+          }
+        }
+      });
     </script>
   </body>
 </html>
