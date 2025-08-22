@@ -1,238 +1,461 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>AR.js GLB Model on Marker</title>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/build/ar-threex.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Mobile Object Placement</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-        font-family: Arial, sans-serif;
-      }
-      
-      #loading {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        color: white;
-        background: rgba(0,0,0,0.7);
-        padding: 10px;
-        border-radius: 5px;
-        z-index: 100;
-      }
-      
-      #instructions {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: white;
-        background: rgba(0,0,0,0.7);
-        padding: 15px;
-        border-radius: 5px;
-        text-align: center;
-        max-width: 300px;
-      }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            color: white;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #status {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #controls {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .object-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .object-btn {
+            background: linear-gradient(45deg, #f093fb, #f5576c);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .object-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .object-btn.active {
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            box-shadow: 0 0 15px rgba(79, 172, 254, 0.5);
+        }
+
+        #instructions {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .crosshair::before {
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+
+        .crosshair::after {
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            transform: translateX(-50%);
+        }
+
+        @media (max-width: 768px) {
+            #ui {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+            }
+            
+            .button {
+                padding: 12px 20px;
+                font-size: 14px;
+            }
+            
+            .object-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
     </style>
-  </head>
-  <body>
-    <div id="loading">Loading AR...</div>
-    <div id="instructions">Point camera at marker to see 3D model</div>
+</head>
+<body>
+    <div id="container">
+        <div class="crosshair"></div>
+        
+        <div id="ui">
+            <div id="status">
+                <div>Status: <span id="arStatus">Checking AR support...</span></div>
+                <div>Objects placed: <span id="objectCount">0</span></div>
+            </div>
+            
+            <div id="controls">
+                <button id="startAR" class="button" disabled>Start AR Session</button>
+                <button id="endAR" class="button" disabled>End AR Session</button>
+                <button id="clearObjects" class="button">Clear All Objects</button>
+                
+                <div>Select object to place:</div>
+                <div class="object-selector">
+                    <button class="object-btn active" data-object="cube">Cube</button>
+                    <button class="object-btn" data-object="sphere">Sphere</button>
+                    <button class="object-btn" data-object="pyramid">Pyramid</button>
+                    <button class="object-btn" data-object="torus">Torus</button>
+                </div>
+            </div>
+            
+            <div id="instructions">
+                <strong>Instructions:</strong><br>
+                1. Click "Start AR Session" to begin<br>
+                2. Point your camera at a flat surface<br>
+                3. Tap the screen to place objects<br>
+                4. Use object selector to change placement type
+            </div>
+        </div>
+    </div>
 
     <script>
-      // --- Scene, Camera, Renderer ---
-      const scene = new THREE.Scene();
-      const camera = new THREE.Camera();
-      scene.add(camera);
-
-      const renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-      });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      document.body.appendChild(renderer.domElement);
-
-      // Add ambient light for better visibility
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      scene.add(ambientLight);
-
-      // Add directional light with shadows
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(0, 2, 1);
-      directionalLight.castShadow = true;
-      directionalLight.shadow.mapSize.width = 2048;
-      directionalLight.shadow.mapSize.height = 2048;
-      scene.add(directionalLight);
-
-      // --- Source webcam ---
-      const arSource = new THREEx.ArToolkitSource({
-        sourceType: "webcam",
-      });
-
-      arSource.init(function () {
-        setTimeout(function () {
-          arSource.onResizeElement();
-          arSource.copyElementSizeTo(renderer.domElement);
-          document.getElementById("loading").textContent = "AR Ready - Point at marker";
-        }, 2000);
-      });
-
-      window.addEventListener("resize", function () {
-        arSource.onResizeElement();
-        arSource.copyElementSizeTo(renderer.domElement);
-      });
-
-      // --- Context AR ---
-      const arContext = new THREEx.ArToolkitContext({
-        cameraParametersUrl: "camera_para.dat",
-        detectionMode: "mono",
-      });
-
-      arContext.init(function () {
-        camera.projectionMatrix.copy(arContext.getProjectionMatrix());
-      });
-
-      // --- Marker root with smoothing ---
-      const markerRoot = new THREE.Group();
-      scene.add(markerRoot);
-
-      const markerControls = new THREEx.ArMarkerControls(
-        arContext,
-        markerRoot,
-        {
-          type: "pattern",
-          patternUrl: "pattern-spider-man-logo.patt",
-          smooth: true,
-          smoothCount: 10,
-          smoothTolerance: 0.01,
-          smoothThreshold: 0.01,
-        }
-      );
-
-      // --- GLB Model Loading ---
-      const loader = new THREE.GLTFLoader();
-      let model = null;
-      let modelMixer = null;
-
-      // Replace 'your-model.glb' with your actual GLB file path
-      const modelPath = "your-model.glb"; // Change this to your GLB file path
-
-      loader.load(
-        modelPath,
-        function (gltf) {
-          model = gltf.scene;
-          
-          // Scale the model (adjust as needed)
-          model.scale.set(0.5, 0.5, 0.5);
-          
-          // Position the model (adjust as needed)
-          model.position.set(0, 0, 0);
-          
-          // Rotate the model if needed
-          model.rotation.x = 0;
-          model.rotation.y = 0;
-          model.rotation.z = 0;
-          
-          // Enable shadows
-          model.traverse(function (child) {
-            if (child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-              // Ensure materials are visible
-              if (child.material) {
-                child.material.needsUpdate = true;
-              }
+        class ARPlaceApp {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.xrSession = null;
+                this.xrRefSpace = null;
+                this.hitTestSource = null;
+                this.placedObjects = [];
+                this.selectedObject = 'cube';
+                this.objectCount = 0;
+                
+                this.init();
             }
-          });
 
-          // Add animations if they exist
-          if (gltf.animations && gltf.animations.length > 0) {
-            modelMixer = new THREE.AnimationMixer(model);
-            const action = modelMixer.clipAction(gltf.animations[0]);
-            action.play();
-          }
+            async init() {
+                this.setupThreeJS();
+                this.setupEventListeners();
+                await this.checkARSupport();
+            }
 
-          markerRoot.add(model);
-          document.getElementById("loading").textContent = "Model loaded successfully!";
-          
-          setTimeout(() => {
-            document.getElementById("loading").style.display = "none";
-          }, 2000);
-        },
-        function (progress) {
-          const percent = Math.round((progress.loaded / progress.total) * 100);
-          document.getElementById("loading").textContent = `Loading model: ${percent}%`;
-        },
-        function (error) {
-          console.error('Error loading GLB model:', error);
-          document.getElementById("loading").textContent = "Error loading model";
-          document.getElementById("loading").style.color = "#ff6b6b";
-          
-          // Create a fallback cube if model fails to load
-          const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-          const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
-          const cube = new THREE.Mesh(geometry, material);
-          cube.position.y = 0.15;
-          cube.castShadow = true;
-          cube.receiveShadow = true;
-          markerRoot.add(cube);
+            setupThreeJS() {
+                // Scene
+                this.scene = new THREE.Scene();
+
+                // Camera
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+                // Renderer
+                this.renderer = new THREE.WebGLRenderer({ 
+                    antialias: true, 
+                    alpha: true 
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.xr.enabled = true;
+                document.getElementById('container').appendChild(this.renderer.domElement);
+
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(0, 10, 5);
+                this.scene.add(directionalLight);
+
+                // Start render loop
+                this.renderer.setAnimationLoop(this.render.bind(this));
+
+                // Handle resize
+                window.addEventListener('resize', this.onWindowResize.bind(this));
+            }
+
+            setupEventListeners() {
+                document.getElementById('startAR').addEventListener('click', this.startAR.bind(this));
+                document.getElementById('endAR').addEventListener('click', this.endAR.bind(this));
+                document.getElementById('clearObjects').addEventListener('click', this.clearObjects.bind(this));
+
+                // Object selector buttons
+                document.querySelectorAll('.object-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.object-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.selectedObject = e.target.dataset.object;
+                    });
+                });
+
+                // Touch/click to place objects
+                this.renderer.domElement.addEventListener('click', this.onTouch.bind(this));
+                this.renderer.domElement.addEventListener('touchend', this.onTouch.bind(this));
+            }
+
+            async checkARSupport() {
+                const statusEl = document.getElementById('arStatus');
+                const startBtn = document.getElementById('startAR');
+
+                if (!navigator.xr) {
+                    statusEl.textContent = 'WebXR not supported';
+                    return;
+                }
+
+                try {
+                    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                    if (supported) {
+                        statusEl.textContent = 'AR supported - Ready to start';
+                        startBtn.disabled = false;
+                    } else {
+                        statusEl.textContent = 'AR not supported on this device';
+                    }
+                } catch (error) {
+                    statusEl.textContent = 'Error checking AR support';
+                    console.error('AR support check failed:', error);
+                }
+            }
+
+            async startAR() {
+                try {
+                    const statusEl = document.getElementById('arStatus');
+                    statusEl.textContent = 'Starting AR session...';
+
+                    this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+                        requiredFeatures: ['local'],
+                        optionalFeatures: ['hit-test']
+                    });
+
+                    await this.renderer.xr.setSession(this.xrSession);
+
+                    this.xrSession.addEventListener('end', this.onSessionEnd.bind(this));
+
+                    this.xrRefSpace = await this.xrSession.requestReferenceSpace('local');
+
+                    // Setup hit testing if available
+                    if (this.xrSession.requestHitTestSource) {
+                        const hitTestSource = await this.xrSession.requestHitTestSource({
+                            space: this.xrSession.inputSources[0]?.targetRaySpace || this.xrRefSpace
+                        });
+                        this.hitTestSource = hitTestSource;
+                    }
+
+                    statusEl.textContent = 'AR session active - Tap to place objects';
+                    document.getElementById('startAR').disabled = true;
+                    document.getElementById('endAR').disabled = false;
+
+                } catch (error) {
+                    console.error('Failed to start AR session:', error);
+                    document.getElementById('arStatus').textContent = 'Failed to start AR session';
+                }
+            }
+
+            endAR() {
+                if (this.xrSession) {
+                    this.xrSession.end();
+                }
+            }
+
+            onSessionEnd() {
+                this.xrSession = null;
+                this.xrRefSpace = null;
+                this.hitTestSource = null;
+                
+                document.getElementById('arStatus').textContent = 'AR session ended';
+                document.getElementById('startAR').disabled = false;
+                document.getElementById('endAR').disabled = true;
+            }
+
+            createObject(type) {
+                let geometry, material;
+                
+                material = new THREE.MeshPhongMaterial({ 
+                    color: new THREE.Color().setHSL(Math.random(), 0.8, 0.6),
+                    transparent: true,
+                    opacity: 0.9
+                });
+
+                switch(type) {
+                    case 'cube':
+                        geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                        break;
+                    case 'sphere':
+                        geometry = new THREE.SphereGeometry(0.05, 16, 16);
+                        break;
+                    case 'pyramid':
+                        geometry = new THREE.ConeGeometry(0.05, 0.1, 4);
+                        break;
+                    case 'torus':
+                        geometry = new THREE.TorusGeometry(0.05, 0.02, 8, 16);
+                        break;
+                    default:
+                        geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                }
+
+                const mesh = new THREE.Mesh(geometry, material);
+                return mesh;
+            }
+
+            onTouch(event) {
+                if (!this.xrSession) return;
+                
+                event.preventDefault();
+
+                // Create and place object at center of screen (crosshair position)
+                const object = this.createObject(this.selectedObject);
+                
+                // Place object 1 meter in front of camera
+                const position = new THREE.Vector3(0, 0, -1);
+                const cameraMatrix = this.camera.matrixWorld;
+                position.applyMatrix4(cameraMatrix);
+                
+                object.position.copy(position);
+                
+                // Add some randomness to avoid overlap
+                object.position.x += (Math.random() - 0.5) * 0.2;
+                object.position.y += (Math.random() - 0.5) * 0.2;
+                
+                // Add rotation animation
+                object.userData = {
+                    rotationSpeed: {
+                        x: (Math.random() - 0.5) * 0.02,
+                        y: (Math.random() - 0.5) * 0.02,
+                        z: (Math.random() - 0.5) * 0.02
+                    }
+                };
+
+                this.scene.add(object);
+                this.placedObjects.push(object);
+                this.objectCount++;
+                
+                document.getElementById('objectCount').textContent = this.objectCount;
+            }
+
+            clearObjects() {
+                this.placedObjects.forEach(object => {
+                    this.scene.remove(object);
+                    if (object.geometry) object.geometry.dispose();
+                    if (object.material) object.material.dispose();
+                });
+                
+                this.placedObjects = [];
+                this.objectCount = 0;
+                document.getElementById('objectCount').textContent = this.objectCount;
+            }
+
+            render(timestamp, frame) {
+                // Animate placed objects
+                this.placedObjects.forEach(object => {
+                    if (object.userData.rotationSpeed) {
+                        object.rotation.x += object.userData.rotationSpeed.x;
+                        object.rotation.y += object.userData.rotationSpeed.y;
+                        object.rotation.z += object.userData.rotationSpeed.z;
+                    }
+                });
+
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
         }
-      );
 
-      // --- Animation loop ---
-      const clock = new THREE.Clock();
-      
-      function animate() {
-        requestAnimationFrame(animate);
-        
-        const delta = clock.getDelta();
-        
-        // Update animation mixer if it exists
-        if (modelMixer) {
-          modelMixer.update(delta);
+        // Start the app
+        window.addEventListener('DOMContentLoaded', () => {
+            new ARPlaceApp();
+        });
+
+        // Fallback for devices without AR
+        if (!navigator.xr) {
+            document.getElementById('instructions').innerHTML = `
+                <strong>AR Not Available</strong><br>
+                This demo requires a device with WebXR AR support.<br>
+                Try on an Android device with Chrome or an iOS device with Safari 15+<br>
+                Make sure to allow camera permissions when prompted.
+            `;
         }
-        
-        // Update AR
-        if (arSource.ready) {
-          arContext.update(arSource.domElement);
-        }
-        
-        renderer.render(scene, camera);
-      }
-
-      animate();
-
-      // --- Optional: Add controls for model manipulation ---
-      let isModelVisible = false;
-      
-      // Track marker visibility
-      markerControls.addEventListener('markerFound', function() {
-        isModelVisible = true;
-        console.log('Marker found - Model should be visible');
-      });
-      
-      markerControls.addEventListener('markerLost', function() {
-        isModelVisible = false;
-        console.log('Marker lost - Model hidden');
-      });
-
-      // Optional: Add click handler to scale model
-      document.addEventListener('click', function(event) {
-        if (isModelVisible && model) {
-          // Cycle through different scales on click
-          const currentScale = model.scale.x;
-          if (currentScale < 0.8) {
-            model.scale.set(0.8, 0.8, 0.8);
-          } else {
-            model.scale.set(0.3, 0.3, 0.3);
-          }
-        }
-      });
     </script>
-  </body>
+</body>
 </html>
