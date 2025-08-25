@@ -50,6 +50,22 @@
             line-height: 1.6;
         }
 
+        .permission-note {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            color: #f39c12;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .permission-note strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+
         .ar-controls {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -315,6 +331,10 @@
         </div>
 
         <div class="ar-controls">
+            <div class="permission-note">
+                <strong>📱 iOS Users:</strong>
+                When you tap "Start Camera AR", iOS will ask for permission to access motion sensors and camera. Please allow both for the best AR experience.
+            </div>
             <button id="startAR" class="ar-button pulse">Start Camera AR</button>
             <button id="checkSupport" class="ar-button" style="background: linear-gradient(135deg, #4834d4, #686de0);">Check Device Support</button>
             <div id="status" class="status" style="display: none;"></div>
@@ -432,17 +452,23 @@
                 const hasMotion = !!window.DeviceMotionEvent;
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                 const isAndroid = /Android/.test(navigator.userAgent);
+                const needsPermission = typeof DeviceOrientationEvent.requestPermission === 'function';
                 
                 info.push(`📱 Platform: ${isIOS ? 'iOS' : isAndroid ? 'Android' : 'Other'}`);
                 info.push(`📷 Camera: ${hasCamera ? '✅' : '❌'}`);
                 info.push(`🧭 Orientation: ${hasOrientation ? '✅' : '❌'}`);
                 info.push(`📳 Motion: ${hasMotion ? '✅' : '❌'}`);
                 
+                if (needsPermission) {
+                    info.push(`🔐 Permission: Required (iOS 13+)`);
+                    info.push(`ℹ️ Tap "Start Camera AR" to grant access`);
+                }
+                
                 deviceInfo.innerHTML = info.join('<br>');
                 deviceInfo.style.display = 'block';
                 
                 if (hasCamera && (hasOrientation || hasMotion)) {
-                    this.showStatus('✅ Device supports camera AR! Ready to start.', 'success');
+                    this.showStatus('✅ Device supports camera AR!', 'success');
                     document.getElementById('startAR').disabled = false;
                 } else {
                     this.showStatus('⚠️ Limited support. Some features may not work.', 'error');
@@ -484,13 +510,8 @@
                     // Request camera permission and start video
                     await this.startCamera();
                     
-                    // Request device orientation permission on iOS 13+
-                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                        const permission = await DeviceOrientationEvent.requestPermission();
-                        if (permission !== 'granted') {
-                            throw new Error('Device orientation permission denied');
-                        }
-                    }
+                    // Request device orientation permission on iOS 13+ (requires user gesture)
+                    await this.requestMotionPermission();
                     
                     this.isARActive = true;
                     this.showARInterface();
@@ -501,6 +522,52 @@
                 } catch (error) {
                     this.showStatus('Failed to start AR: ' + error.message, 'error');
                 }
+            }
+
+            async requestMotionPermission() {
+                // Check if we need to request permission (iOS 13+)
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    this.showStatus('Requesting motion sensor access...', 'info');
+                    
+                    try {
+                        const orientationPermission = await DeviceOrientationEvent.requestPermission();
+                        
+                        if (orientationPermission !== 'granted') {
+                            throw new Error('Device orientation permission denied');
+                        }
+                        
+                        // Also request device motion permission if available
+                        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                            const motionPermission = await DeviceMotionEvent.requestPermission();
+                            if (motionPermission !== 'granted') {
+                                console.warn('Device motion permission denied, but continuing with orientation only');
+                            }
+                        }
+                        
+                        this.showStatus('Motion sensors authorized ✅', 'success');
+                        
+                    } catch (error) {
+                        // Show user-friendly error with instructions
+                        this.showPermissionInstructions();
+                        throw error;
+                    }
+                } else {
+                    // Older iOS or Android - permissions not required
+                    this.showStatus('Motion sensors available', 'success');
+                }
+            }
+
+            showPermissionInstructions() {
+                const status = document.getElementById('status');
+                status.innerHTML = `
+                    <strong>⚠️ Motion Permission Required</strong><br>
+                    To use AR features on iOS:<br>
+                    1. Tap "Start Camera AR" button<br>
+                    2. Allow motion sensor access when prompted<br>
+                    3. Refresh page if needed
+                `;
+                status.className = 'status error';
+                status.style.display = 'block';
             }
 
             async startCamera() {
