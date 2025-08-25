@@ -29,7 +29,7 @@
     .hint .chip { background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.15); padding: 10px 14px; border-radius: 14px; }
     model-viewer[ar-status="session-started"] ~ .hint { display: block; }
 
-    .diag { position: fixed; right: 10px; bottom: 10px; font-size: 12px; color:#cbd5e1; opacity:.85; }
+    .diag { position: fixed; right: 10px; bottom: 10px; font-size: 12px; color:#cbd5e1; opacity:.9; max-width: 50vw; }
 
     footer { text-align: center; padding: 10px; color: #9aa1a9; font-size: 12px; }
     a { color: #b5cdfb; }
@@ -59,11 +59,11 @@
       tone-mapping="aces"
       interaction-prompt="auto"
     >
-      <!-- Apple Quick Look anchor (used by iOS). href is set from ios-src at runtime. -->
-      <a id="iosLink" rel="ar" slot="ar" href="/assets/model.usdz" aria-label="Open in AR"></a>
+      <!-- Provide a platform-neutral AR anchor; DO NOT hardcode href so model-viewer can fill it -->
+      <a id="platformArLink" rel="ar" slot="ar" aria-label="Open in AR"></a>
     </model-viewer>
 
-    <!-- Explicit AR button that calls activateAR() (helps with iOS gesture requirements) -->
+    <!-- Explicit AR button that calls activateAR(); includes Android Scene Viewer intent fallback -->
     <div class="controls">
       <button id="btnAR" type="button">View in your space</button>
     </div>
@@ -71,48 +71,76 @@
     <div class="hint"><div class="chip">Move to scan the floor, then tap to place. Drag to reposition; two‑finger rotate.</div></div>
     <div class="diag" id="diag"></div>
 
-    <footer>Replace <code>/assets/model.glb</code> + <code>/assets/model.usdz</code> with your files. Works on Android (Scene Viewer/WebXR) and iPhone (Quick Look/WebXR).</footer>
+    <footer>Replace <code>/assets/model.glb</code> (GLB) + <code>/assets/model.usdz</code> (USDZ) with your files. Android: Scene Viewer, iPhone: Quick Look. WebXR when available.</footer>
   </div>
 
   <script>
     const mv = document.getElementById('viewer');
     const btnAR = document.getElementById('btnAR');
-    const iosLink = document.getElementById('iosLink');
+    const platformArLink = document.getElementById('platformArLink');
     const diag = document.getElementById('diag');
 
-    // Ensure iOS link points to the same USDZ as ios-src and add Quick Look params
-    const usdz = mv.getAttribute('ios-src');
-    if (usdz) {
-      const absolute = new URL(usdz, location.href).href;
-      // Optional Quick Look params: disallow pinch-scaling + custom label
-      iosLink.href = absolute + '#allowsContentScaling=0&callToAction=View%20in%20your%20space';
-    }
+    // Helper utils
+    const isAndroid = () => /Android/i.test(navigator.userAgent);
+    const isChrome = () => /Chrome\//i.test(navigator.userAgent);
 
     function log(s) { diag.textContent = s; }
 
-    // Pressing our button always uses model‑viewer API (more reliable across browsers)
+    // Keep iOS Quick Look anchor clean so model-viewer sets href from ios-src automatically
+    function refreshIosAnchor() {
+      const usdz = mv.getAttribute('ios-src');
+      if (!usdz) return;
+      // model-viewer will set the correct href; you can still add Quick Look params if needed:
+      // platformArLink.href = new URL(usdz, location.href).href + '#allowsContentScaling=0';
+    }
+    refreshIosAnchor();
+
+    // Android Scene Viewer intent fallback (robust when activateAR() is blocked)
+    function openSceneViewerIntent() {
+      const glbAttr = mv.getAttribute('src');
+      if (!glbAttr) { log('No GLB src set'); return; }
+      const glbAbs = new URL(glbAttr, location.href).href;
+      const title = encodeURIComponent(mv.getAttribute('alt') || '3D Model');
+      const file = encodeURIComponent(glbAbs);
+      const fallback = encodeURIComponent(location.href);
+      const intent = `intent://arvr.google.com/scene-viewer/1.0?file=${file}&mode=ar_preferred&title=${title}#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=${fallback};end;`;
+      location.href = intent;
+    }
+
+    // Primary AR launch path
     btnAR.addEventListener('click', async () => {
       try {
-        if (!mv.canActivateAR) {
-          log('AR not available here. Try Safari (iOS) or Chrome (Android).');
+        if (mv.canActivateAR) {
+          await mv.activateAR(); // model-viewer chooses Quick Look / Scene Viewer / WebXR
           return;
         }
-        await mv.activateAR();
+        // If canActivateAR is false on Android Chrome, try Scene Viewer intent directly
+        if (isAndroid() && isChrome()) {
+          log('Trying Scene Viewer intent…');
+          openSceneViewerIntent();
+          return;
+        }
+        log('AR not available: try Safari (iOS) or Chrome (Android).');
       } catch (err) {
-        log('activateAR() failed: ' + (err?.message || err));
+        // If built-in path fails on Android, use intent fallback
+        if (isAndroid()) {
+          log('activateAR() failed, falling back to Scene Viewer intent…');
+          openSceneViewerIntent();
+        } else {
+          log('activateAR() failed: ' + (err?.message || err));
+        }
       }
     });
 
-    // Useful diagnostics
+    // Diagnostics
     mv.addEventListener('ar-status', (e) => {
       const { status, reason } = e.detail || {};
       log('ar-status: ' + status + (reason ? (' | reason: ' + reason) : ''));
       if (status === 'session-started' && navigator.vibrate) navigator.vibrate(10);
     });
 
-    // Warn if embedded in an iframe without permissions (iOS blocks Quick Look in some in-app browsers)
     if (window !== window.top) {
-      log('This page is in an iframe. iOS may block AR unless the iframe allows camera & xr-spatial-tracking.');
+      log('This page is in an iframe. iOS/Android may block AR unless the iframe allows camera & xr-spatial-tracking.');
     }
   </script>
 </body>
