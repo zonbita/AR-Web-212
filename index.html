@@ -2,21 +2,23 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mobile AR Experience</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mobile AR Experience - iOS Compatible</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            overflow-x: hidden;
+            overflow: hidden;
         }
 
         .container {
@@ -72,11 +74,11 @@
             width: 100%;
             margin-bottom: 15px;
             box-shadow: 0 8px 20px rgba(238, 90, 36, 0.3);
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .ar-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 30px rgba(238, 90, 36, 0.4);
+        .ar-button:active {
+            transform: scale(0.98);
         }
 
         .ar-button:disabled {
@@ -122,6 +124,17 @@
             display: none;
         }
 
+        .camera-view {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 999;
+            object-fit: cover;
+            display: none;
+        }
+
         .ar-ui {
             position: fixed;
             bottom: 30px;
@@ -153,11 +166,13 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
+            font-size: 1.2rem;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .ar-control-btn:hover {
+        .ar-control-btn:active {
+            transform: scale(0.9);
             background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
         }
 
         .ar-control-btn.active {
@@ -178,6 +193,21 @@
             cursor: pointer;
             font-weight: 600;
             display: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .ar-info {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1002;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: none;
+            backdrop-filter: blur(10px);
         }
 
         .features {
@@ -208,6 +238,15 @@
             line-height: 1.5;
         }
 
+        .device-info {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: white;
+        }
+
         @media (max-width: 768px) {
             .hero h1 {
                 font-size: 2rem;
@@ -228,56 +267,94 @@
         }
 
         @keyframes pulse {
-            0% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.05);
-            }
-            100% {
-                transform: scale(1);
-            }
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            z-index: 1001;
+            display: none;
+            pointer-events: none;
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: #ff6b6b;
+            border-radius: 2px;
+        }
+
+        .crosshair::before {
+            width: 4px;
+            height: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .crosshair::after {
+            width: 50px;
+            height: 4px;
+            top: 50%;
+            transform: translateY(-50%);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="hero">
-            <h1>🚀 Mobile AR Experience</h1>
-            <p>Experience the future with augmented reality right in your mobile browser. Place 3D objects, interact with virtual content, and explore AR capabilities.</p>
+            <h1>📱 Mobile AR Experience</h1>
+            <p>Camera-based AR for iOS and Android. Place 3D objects using device motion and camera feed.</p>
         </div>
 
         <div class="ar-controls">
-            <button id="startAR" class="ar-button pulse">Start AR Experience</button>
-            <button id="checkSupport" class="ar-button" style="background: linear-gradient(135deg, #4834d4, #686de0);">Check AR Support</button>
+            <button id="startAR" class="ar-button pulse">Start Camera AR</button>
+            <button id="checkSupport" class="ar-button" style="background: linear-gradient(135deg, #4834d4, #686de0);">Check Device Support</button>
             <div id="status" class="status" style="display: none;"></div>
+            <div id="deviceInfo" class="device-info" style="display: none;"></div>
         </div>
 
         <div class="features">
             <div class="feature-card">
-                <h3>🎯 Object Placement</h3>
-                <p>Tap to place 3D objects in your real environment with realistic shadows and lighting.</p>
+                <h3>📱 iOS Compatible</h3>
+                <p>Works on iPhone using camera access and device orientation sensors for AR positioning.</p>
             </div>
             <div class="feature-card">
-                <h3>🎨 Interactive Models</h3>
-                <p>Rotate, scale, and interact with virtual objects using touch gestures.</p>
+                <h3>🎯 Motion Tracking</h3>
+                <p>Uses accelerometer and gyroscope data to track device movement and place objects.</p>
             </div>
             <div class="feature-card">
-                <h3>🌟 Realistic Rendering</h3>
-                <p>Advanced lighting and materials make virtual objects look naturally integrated.</p>
+                <h3>📷 Live Camera</h3>
+                <p>Real camera feed with 3D objects overlaid using motion-based positioning.</p>
             </div>
         </div>
     </div>
 
-    <!-- AR Canvas and Controls -->
+    <!-- AR Interface -->
+    <video id="cameraView" class="camera-view" autoplay muted playsinline></video>
     <canvas id="arCanvas" class="ar-canvas"></canvas>
+    <div class="crosshair" id="crosshair"></div>
+    
+    <div id="arInfo" class="ar-info">
+        <div id="motionData">Move device to track motion</div>
+    </div>
+    
     <button id="exitAR" class="exit-ar">Exit AR</button>
+    
     <div id="arUI" class="ar-ui">
         <div class="ar-controls-overlay">
-            <button id="addCube" class="ar-control-btn" title="Add Cube">📦</button>
+            <button id="addCube" class="ar-control-btn active" title="Add Cube">📦</button>
             <button id="addSphere" class="ar-control-btn" title="Add Sphere">⚽</button>
             <button id="addPyramid" class="ar-control-btn" title="Add Pyramid">🔺</button>
             <button id="clearObjects" class="ar-control-btn" title="Clear All">🗑️</button>
+            <button id="takePhoto" class="ar-control-btn" title="Screenshot">📸</button>
         </div>
     </div>
 
@@ -287,28 +364,51 @@
                 this.scene = null;
                 this.camera = null;
                 this.renderer = null;
-                this.session = null;
-                this.referenceSpace = null;
                 this.objects = [];
-                this.reticle = null;
-                this.hitTestSource = null;
+                this.currentObjectType = 'cube';
+                this.isARActive = false;
+                
+                // Motion tracking
+                this.deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
+                this.lastOrientation = { alpha: 0, beta: 0, gamma: 0 };
+                this.motionSensitivity = 0.1;
+                
+                // Camera
+                this.videoStream = null;
+                this.videoElement = document.getElementById('cameraView');
                 
                 this.init();
             }
 
             init() {
                 this.setupEventListeners();
-                this.checkARSupport();
+                this.checkDeviceSupport();
+                this.setupThreeJS();
             }
 
             setupEventListeners() {
                 document.getElementById('startAR').addEventListener('click', () => this.startAR());
-                document.getElementById('checkSupport').addEventListener('click', () => this.checkARSupport());
+                document.getElementById('checkSupport').addEventListener('click', () => this.checkDeviceSupport());
                 document.getElementById('exitAR').addEventListener('click', () => this.exitAR());
                 document.getElementById('addCube').addEventListener('click', () => this.setObjectType('cube'));
                 document.getElementById('addSphere').addEventListener('click', () => this.setObjectType('sphere'));
                 document.getElementById('addPyramid').addEventListener('click', () => this.setObjectType('pyramid'));
                 document.getElementById('clearObjects').addEventListener('click', () => this.clearObjects());
+                document.getElementById('takePhoto').addEventListener('click', () => this.takeScreenshot());
+                
+                // Touch events for object placement
+                document.getElementById('arCanvas').addEventListener('touchstart', (e) => this.onTouch(e));
+                document.getElementById('arCanvas').addEventListener('click', (e) => this.onTouch(e));
+                
+                // Device orientation
+                if (window.DeviceOrientationEvent) {
+                    window.addEventListener('deviceorientation', (e) => this.onDeviceOrientation(e));
+                }
+                
+                // Handle device motion for more sensitive tracking
+                if (window.DeviceMotionEvent) {
+                    window.addEventListener('devicemotion', (e) => this.onDeviceMotion(e));
+                }
             }
 
             showStatus(message, type = 'info') {
@@ -322,172 +422,226 @@
                 }, 5000);
             }
 
-            async checkARSupport() {
-                if (!navigator.xr) {
-                    this.showStatus('WebXR not supported on this device', 'error');
-                    return false;
-                }
-
-                try {
-                    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-                    if (supported) {
-                        this.showStatus('✅ AR is supported! Ready to start experience.', 'success');
-                        document.getElementById('startAR').disabled = false;
-                    } else {
-                        this.showStatus('AR mode not supported. Try on a compatible mobile device.', 'error');
-                    }
-                    return supported;
-                } catch (error) {
-                    this.showStatus('Error checking AR support: ' + error.message, 'error');
-                    return false;
-                }
-            }
-
-            async startAR() {
-                if (!navigator.xr) {
-                    this.showStatus('WebXR not available', 'error');
-                    return;
-                }
-
-                try {
-                    this.showStatus('Initializing AR session...', 'info');
-                    
-                    this.session = await navigator.xr.requestSession('immersive-ar', {
-                        requiredFeatures: ['local-floor', 'hit-test'],
-                        optionalFeatures: ['dom-overlay'],
-                        domOverlay: { root: document.body }
-                    });
-
-                    await this.setupAR();
-                    this.showARInterface();
-                    this.showStatus('AR session started! Tap to place objects.', 'success');
-                    
-                } catch (error) {
-                    this.showStatus('Failed to start AR: ' + error.message, 'error');
+            checkDeviceSupport() {
+                const deviceInfo = document.getElementById('deviceInfo');
+                let info = [];
+                
+                // Check various capabilities
+                const hasCamera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+                const hasOrientation = !!window.DeviceOrientationEvent;
+                const hasMotion = !!window.DeviceMotionEvent;
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                const isAndroid = /Android/.test(navigator.userAgent);
+                
+                info.push(`📱 Platform: ${isIOS ? 'iOS' : isAndroid ? 'Android' : 'Other'}`);
+                info.push(`📷 Camera: ${hasCamera ? '✅' : '❌'}`);
+                info.push(`🧭 Orientation: ${hasOrientation ? '✅' : '❌'}`);
+                info.push(`📳 Motion: ${hasMotion ? '✅' : '❌'}`);
+                
+                deviceInfo.innerHTML = info.join('<br>');
+                deviceInfo.style.display = 'block';
+                
+                if (hasCamera && (hasOrientation || hasMotion)) {
+                    this.showStatus('✅ Device supports camera AR! Ready to start.', 'success');
+                    document.getElementById('startAR').disabled = false;
+                } else {
+                    this.showStatus('⚠️ Limited support. Some features may not work.', 'error');
                 }
             }
 
-            async setupAR() {
-                // Create Three.js scene
+            setupThreeJS() {
+                // Setup Three.js scene
                 this.scene = new THREE.Scene();
+                
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(0, 0, 0);
                 
                 this.renderer = new THREE.WebGLRenderer({ 
                     canvas: document.getElementById('arCanvas'),
                     alpha: true,
                     antialias: true
                 });
-                this.renderer.setPixelRatio(window.devicePixelRatio);
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.xr.enabled = true;
-                this.renderer.xr.setSession(this.session);
-
-                // Setup camera
-                this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-                // Add lighting
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.setClearColor(0x000000, 0);
+                
+                // Lighting
                 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
                 this.scene.add(ambientLight);
                 
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(0, 10, 5);
+                directionalLight.position.set(5, 5, 5);
                 this.scene.add(directionalLight);
-
-                // Create reticle for placement
-                this.createReticle();
-
-                // Setup hit testing
-                this.referenceSpace = await this.session.requestReferenceSpace('local-floor');
-                this.session.requestHitTestSource({ space: this.referenceSpace })
-                    .then((source) => {
-                        this.hitTestSource = source;
-                    });
-
-                // Setup interaction
-                this.session.addEventListener('select', (event) => this.onSelect(event));
                 
-                this.currentObjectType = 'cube';
-                this.animate();
+                // Handle window resize
+                window.addEventListener('resize', () => this.onWindowResize());
             }
 
-            createReticle() {
-                const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
-                const material = new THREE.MeshBasicMaterial({ 
-                    color: 0xff6b6b, 
-                    transparent: true, 
-                    opacity: 0.8 
-                });
-                this.reticle = new THREE.Mesh(geometry, material);
-                this.reticle.matrixAutoUpdate = false;
-                this.reticle.visible = false;
-                this.scene.add(this.reticle);
+            async startAR() {
+                try {
+                    this.showStatus('Starting camera...', 'info');
+                    
+                    // Request camera permission and start video
+                    await this.startCamera();
+                    
+                    // Request device orientation permission on iOS 13+
+                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                        const permission = await DeviceOrientationEvent.requestPermission();
+                        if (permission !== 'granted') {
+                            throw new Error('Device orientation permission denied');
+                        }
+                    }
+                    
+                    this.isARActive = true;
+                    this.showARInterface();
+                    this.animate();
+                    
+                    this.showStatus('AR started! Tap screen to place objects', 'success');
+                    
+                } catch (error) {
+                    this.showStatus('Failed to start AR: ' + error.message, 'error');
+                }
+            }
+
+            async startCamera() {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment', // Back camera
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+                
+                try {
+                    this.videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    this.videoElement.srcObject = this.videoStream;
+                    
+                    return new Promise((resolve) => {
+                        this.videoElement.onloadedmetadata = () => {
+                            resolve();
+                        };
+                    });
+                } catch (error) {
+                    throw new Error('Camera access denied or not available');
+                }
+            }
+
+            onDeviceOrientation(event) {
+                this.deviceOrientation = {
+                    alpha: event.alpha || 0,
+                    beta: event.beta || 0,
+                    gamma: event.gamma || 0
+                };
+                
+                if (this.isARActive) {
+                    this.updateCameraFromMotion();
+                    this.updateMotionDisplay();
+                }
+            }
+
+            onDeviceMotion(event) {
+                // Additional motion data for smoother tracking
+                if (event.rotationRate && this.isARActive) {
+                    const { alpha, beta, gamma } = event.rotationRate;
+                    // Smooth the rotation for better AR experience
+                    this.camera.rotation.x += (beta || 0) * this.motionSensitivity * 0.01;
+                    this.camera.rotation.y += (alpha || 0) * this.motionSensitivity * 0.01;
+                    this.camera.rotation.z += (gamma || 0) * this.motionSensitivity * 0.01;
+                }
+            }
+
+            updateCameraFromMotion() {
+                const { alpha, beta, gamma } = this.deviceOrientation;
+                
+                // Convert device orientation to camera rotation
+                this.camera.rotation.x = (beta - 90) * Math.PI / 180;
+                this.camera.rotation.y = alpha * Math.PI / 180;
+                this.camera.rotation.z = gamma * Math.PI / 180;
+            }
+
+            updateMotionDisplay() {
+                const motionData = document.getElementById('motionData');
+                if (motionData) {
+                    const { alpha, beta, gamma } = this.deviceOrientation;
+                    motionData.innerHTML = `α: ${alpha.toFixed(1)}° β: ${beta.toFixed(1)}° γ: ${gamma.toFixed(1)}°`;
+                }
             }
 
             setObjectType(type) {
                 this.currentObjectType = type;
                 
-                // Update UI to show active selection
+                // Update UI
                 document.querySelectorAll('.ar-control-btn').forEach(btn => btn.classList.remove('active'));
                 document.getElementById(`add${type.charAt(0).toUpperCase() + type.slice(1)}`).classList.add('active');
             }
 
-            onSelect(event) {
-                if (!this.reticle.visible) return;
-
+            onTouch(event) {
+                event.preventDefault();
+                
+                if (!this.isARActive) return;
+                
+                // Create object at center of screen (simulating hit-test)
                 const object = this.createObject(this.currentObjectType);
-                object.position.setFromMatrixPosition(this.reticle.matrix);
-                object.userData.isPlaced = true;
+                
+                // Position object in front of camera
+                const distance = 2;
+                object.position.set(
+                    Math.sin(this.camera.rotation.y) * distance,
+                    -Math.sin(this.camera.rotation.x) * distance,
+                    -Math.cos(this.camera.rotation.y) * distance
+                );
                 
                 this.scene.add(object);
                 this.objects.push(object);
                 
-                // Add some entrance animation
-                object.scale.set(0.1, 0.1, 0.1);
+                // Animate in
                 this.animateObjectIn(object);
             }
 
             createObject(type) {
                 let geometry, material;
                 
-                const colors = [0xff6b6b, 0x4834d4, 0x00d2d3, 0xff9ff3, 0x54a0ff];
+                const colors = [0xff6b6b, 0x4834d4, 0x00d2d3, 0xff9ff3, 0x54a0ff, 0x2ed573];
                 const color = colors[Math.floor(Math.random() * colors.length)];
                 
                 material = new THREE.MeshLambertMaterial({ color });
                 
+                const size = 0.3;
                 switch(type) {
                     case 'cube':
-                        geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                        geometry = new THREE.BoxGeometry(size, size, size);
                         break;
                     case 'sphere':
-                        geometry = new THREE.SphereGeometry(0.1, 16, 16);
+                        geometry = new THREE.SphereGeometry(size/2, 16, 16);
                         break;
                     case 'pyramid':
-                        geometry = new THREE.ConeGeometry(0.1, 0.2, 8);
+                        geometry = new THREE.ConeGeometry(size/2, size, 8);
                         break;
                     default:
-                        geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                        geometry = new THREE.BoxGeometry(size, size, size);
                 }
                 
                 const mesh = new THREE.Mesh(geometry, material);
-                mesh.userData.originalScale = { x: 1, y: 1, z: 1 };
                 mesh.userData.rotationSpeed = (Math.random() - 0.5) * 0.02;
+                mesh.userData.floatSpeed = Math.random() * 0.01 + 0.005;
+                mesh.userData.floatOffset = Math.random() * Math.PI * 2;
                 
                 return mesh;
             }
 
             animateObjectIn(object) {
-                const targetScale = { x: 1, y: 1, z: 1 };
-                const duration = 500;
+                object.scale.set(0.1, 0.1, 0.1);
+                
+                const targetScale = 1;
+                const duration = 800;
                 const start = performance.now();
                 
                 const animate = (time) => {
                     const progress = Math.min((time - start) / duration, 1);
                     const easeOut = 1 - Math.pow(1 - progress, 3);
                     
-                    object.scale.set(
-                        0.1 + (targetScale.x - 0.1) * easeOut,
-                        0.1 + (targetScale.y - 0.1) * easeOut,
-                        0.1 + (targetScale.z - 0.1) * easeOut
-                    );
+                    const scale = 0.1 + (targetScale - 0.1) * easeOut;
+                    object.scale.set(scale, scale, scale);
                     
                     if (progress < 1) {
                         requestAnimationFrame(animate);
@@ -500,70 +654,100 @@
             clearObjects() {
                 this.objects.forEach(object => {
                     this.scene.remove(object);
+                    object.geometry.dispose();
+                    object.material.dispose();
                 });
                 this.objects = [];
             }
 
+            takeScreenshot() {
+                // Create a temporary canvas to combine video and 3D rendering
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                
+                // Draw video frame
+                ctx.drawImage(this.videoElement, 0, 0, canvas.width, canvas.height);
+                
+                // Draw 3D canvas on top
+                ctx.drawImage(this.renderer.domElement, 0, 0);
+                
+                // Create download link
+                const link = document.createElement('a');
+                link.download = 'ar-screenshot.png';
+                link.href = canvas.toDataURL();
+                link.click();
+                
+                this.showStatus('Screenshot saved! 📸', 'success');
+            }
+
             animate() {
-                this.renderer.setAnimationLoop((timestamp, frame) => {
-                    if (frame) {
-                        // Handle hit testing
-                        if (this.hitTestSource) {
-                            const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-                            if (hitTestResults.length > 0) {
-                                const hit = hitTestResults[0];
-                                this.reticle.visible = true;
-                                this.reticle.matrix.fromArray(hit.getPose(this.referenceSpace).transform.matrix);
-                            } else {
-                                this.reticle.visible = false;
-                            }
-                        }
-                        
-                        // Animate objects
-                        this.objects.forEach(object => {
-                            if (object.userData.rotationSpeed) {
-                                object.rotation.y += object.userData.rotationSpeed;
-                            }
-                        });
+                if (!this.isARActive) return;
+                
+                requestAnimationFrame(() => this.animate());
+                
+                // Animate objects
+                const time = performance.now() * 0.001;
+                this.objects.forEach(object => {
+                    if (object.userData.rotationSpeed) {
+                        object.rotation.y += object.userData.rotationSpeed;
                     }
-                    
-                    this.renderer.render(this.scene, this.camera);
+                    if (object.userData.floatSpeed) {
+                        object.position.y += Math.sin(time + object.userData.floatOffset) * object.userData.floatSpeed;
+                    }
                 });
+                
+                this.renderer.render(this.scene, this.camera);
             }
 
             showARInterface() {
                 document.querySelector('.container').style.display = 'none';
+                document.getElementById('cameraView').style.display = 'block';
                 document.getElementById('arCanvas').style.display = 'block';
+                document.getElementById('crosshair').style.display = 'block';
+                document.getElementById('arInfo').style.display = 'block';
                 document.getElementById('exitAR').style.display = 'block';
                 document.getElementById('arUI').style.display = 'block';
             }
 
             exitAR() {
-                if (this.session) {
-                    this.session.end();
+                this.isARActive = false;
+                
+                // Stop camera
+                if (this.videoStream) {
+                    this.videoStream.getTracks().forEach(track => track.stop());
                 }
                 
+                // Hide AR interface
                 document.querySelector('.container').style.display = 'flex';
+                document.getElementById('cameraView').style.display = 'none';
                 document.getElementById('arCanvas').style.display = 'none';
+                document.getElementById('crosshair').style.display = 'none';
+                document.getElementById('arInfo').style.display = 'none';
                 document.getElementById('exitAR').style.display = 'none';
                 document.getElementById('arUI').style.display = 'none';
                 
+                this.clearObjects();
                 this.showStatus('AR session ended', 'info');
-                
-                // Cleanup
-                this.objects = [];
-                this.session = null;
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
             }
         }
 
-        // Initialize the AR app when the page loads
+        // Initialize the AR app
         window.addEventListener('DOMContentLoaded', () => {
             new MobileARApp();
         });
 
         // Handle page visibility changes
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden && window.arApp && window.arApp.session) {
+            if (document.hidden && window.arApp && window.arApp.isARActive) {
                 window.arApp.exitAR();
             }
         });
