@@ -1,233 +1,95 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tap‑to‑Place AR (iPhone + Android) — Fixed assets</title>
+  <meta charset="UTF-8">
+  <title>AR Multi-Animation with Sound</title>
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-  <!-- Using public sample assets so the page doesn't 404 in the sandbox -->
-  <link rel="preload" as="fetch" href="https://modelviewer.dev/shared-assets/models/Astronaut.usdz" type="model/vnd.usdz+zip" crossorigin>
   <style>
-    html, body { height: 100%; margin: 0; }
-    body { font-family: system-ui, sans-serif; background:#0b0c10; color:#eee; }
-    model-viewer { width: 100%; height: 100vh; --poster-color: #0b0c10; }
-    .controls { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 3; display:flex; gap:8px; }
-    .controls button, .controls a { padding: 10px 14px; border-radius: 999px; border: none; background: #2563eb; color: #fff; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,.25); text-decoration:none; }
-    .controls .secondary { background: rgba(255,255,255,.06); color:#e6edf3; box-shadow:none; border:1px solid rgba(255,255,255,.06); }
-    .diag { position: fixed; right: 10px; bottom: 10px; font-size: 12px; color:#cbd5e1; opacity:.95; max-width: 46vw; background: rgba(0,0,0,0.45); padding:8px 10px; border-radius:8px; }
-    .notes { position: fixed; left: 10px; bottom: 10px; font-size: 12px; color:#9aa1a9; max-width: 46vw; }
+    body { margin:0; display:flex; flex-direction:column; align-items:center; background:#111; color:#fff; font-family:sans-serif; }
+    model-viewer { width:100%; height:80vh; background:#222; }
+    audio { display:none; }
   </style>
 </head>
 <body>
-  <!--
-    IMPORTANT: Replace the src + ios-src below with your own hosted .glb and .usdz files
-    The sandbox 404 happened because /assets/model.glb didn't exist there. Using absolute URLs avoids that.
-  -->
-  <model-viewer
-    id="viewer"
-    src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-    ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
-    alt="Astronaut"
+  <model-viewer id="mv"
+    src="model.glb"
+    ios-src="model.usdz"
     ar
-    ar-modes="webxr scene-viewer quick-look"
-    ar-placement="floor"
-    ar-scale="fixed"
-    camera-controls
+    ar-modes="scene-viewer quick-look webxr"
     autoplay
-    tone-mapping="aces"
+    camera-controls
     shadow-intensity="1"
-    interaction-prompt="auto"
-  >
-    <!-- model-viewer uses an <a rel="ar"> anchor in the slot="ar" for iOS Quick Look -->
-    <a id="platformArLink" slot="ar" rel="ar" style="display:none"></a>
-
-    <!-- Keep the built-in AR button inside model-viewer as a visual affordance -->
-    <button slot="ar-button" id="arButton">View in your space</button>
+    environment-image="neutral"
+    animation-crossfade-duration="500">
   </model-viewer>
 
-  <div class="controls" role="region" aria-label="AR controls">
-    <button id="btnAR" type="button">View in your space</button>
-    <button id="btnDiag" class="secondary" type="button">Run diagnostics</button>
-    <a id="manualScene" class="secondary" href="#">Open Scene Viewer</a>
-  </div>
-
-  <div class="diag" id="diag">Initializing…</div>
-  <div class="notes">Notes: This page uses public sample models so you won't get a 404. Replace the <code>src</code>/<code>ios-src</code> with your own HTTPS-hosted files for production.</div>
+  <audio id="sfx"></audio>
 
   <script>
-  (async function init() {
-    const mv = document.getElementById('viewer');
-    const btnAR = document.getElementById('btnAR');
-    const btnDiag = document.getElementById('btnDiag');
-    const manualScene = document.getElementById('manualScene');
-    const platformArLink = document.getElementById('platformArLink');
-    const diag = document.getElementById('diag');
+    const mv = document.getElementById('mv');
+    const audio = document.getElementById('sfx');
 
-    const isAndroid = () => /Android/i.test(navigator.userAgent);
-    const isChrome = () => /Chrome\//i.test(navigator.userAgent) && !/CriOS/.test(navigator.userAgent);
-    const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // Map animations → sounds (replace with your files)
+    const animationSounds = {
+      "Idle": "idle.mp3",
+      "Walk": "walk.mp3",
+      "Run": "run.mp3",
+      "Jump": "jump.mp3"
+    };
 
-    function log(...parts) {
-      const text = parts.map(p => (typeof p === 'object' ? JSON.stringify(p) : String(p))).join(' ');
-      console.log('[AR Debug]', text);
-      diag.textContent = text;
-    }
+    let animations = [];
+    let currentIndex = 0;
+    let isPlaying = false;
 
-    // Wait until model-viewer is registered
-    try {
-      await customElements.whenDefined('model-viewer');
-      log('model-viewer defined');
-    } catch (e) {
-      log('Error waiting for model-viewer definition:', e?.message || e);
-    }
-
-    const glb = mv.getAttribute('src');
-    const usdz = mv.getAttribute('ios-src');
-
-    // Set the Quick Look anchor href (model-viewer copies from ios-src normally, but we keep it explicit)
-    if (platformArLink && usdz) {
-      try {
-        platformArLink.href = new URL(usdz, location.href).href + '#allowsContentScaling=0';
-      } catch (e) { /* ignore */ }
-    }
-
-    // Utility: probe asset with HEAD (may be blocked by CORS on some servers)
-    async function probeAsset(url) {
-      try {
-        const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-        return { ok: res.ok, status: res.status, type: res.headers.get('content-type') };
-      } catch (err) {
-        return { ok: false, error: err.message || String(err) };
-      }
-    }
-
-    // build Scene Viewer URL
-    function sceneViewerUrlFor(glbUrl, title) {
-      const file = encodeURIComponent(new URL(glbUrl, location.href).href);
-      const t = encodeURIComponent(title || '3D Model');
-      return `https://arvr.google.com/scene-viewer/1.0?file=${file}&mode=ar_preferred&title=${t}`;
-    }
-
-    // intent fallback for older Chrome
-    function sceneViewerIntent(glbUrl, title) {
-      const file = encodeURIComponent(new URL(glbUrl, location.href).href);
-      const t = encodeURIComponent(title || '3D Model');
-      const fallback = encodeURIComponent(location.href);
-      return `intent://arvr.google.com/scene-viewer/1.0?file=${file}&mode=ar_preferred&title=${t}#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=${fallback};end;`;
-    }
-
-    // Diagnostics runner
-    async function runDiagnostics() {
-      log('UserAgent: ' + navigator.userAgent);
-      if (glb) {
-        log('Probing GLB:', glb);
-        const g = await probeAsset(glb);
-        log('GLB probe: ' + JSON.stringify(g));
-      }
-      if (usdz) {
-        log('Probing USDZ:', usdz);
-        const u = await probeAsset(usdz);
-        log('USDZ probe: ' + JSON.stringify(u));
-      }
-
-      // Check model-viewer AR readiness
-      try {
-        if (typeof mv.canActivateAR !== 'undefined') log('mv.canActivateAR: ' + mv.canActivateAR);
-      } catch (e) { /* ignore */ }
-
-      // WebXR quick check
-      if (navigator.xr && navigator.xr.isSessionSupported) {
-        try {
-          const supported = await navigator.xr.isSessionSupported('immersive-ar');
-          log('navigator.xr immersive-ar supported: ' + supported);
-        } catch (err) { log('navigator.xr check error: ' + (err?.message || err)); }
-      } else {
-        log('navigator.xr not available');
-      }
-
-      log('Diagnostics complete. Try pressing "View in your space" after this message.');
-    }
-
-    // wire diagnostic button
-    btnDiag.addEventListener('click', async () => {
-      await runDiagnostics();
-    });
-
-    // Prepare manual Scene Viewer link
-    manualScene.href = glb ? sceneViewerUrlFor(glb, mv.getAttribute('alt')) : '#';
-    manualScene.addEventListener('click', (e) => {
-      // allow normal navigation; this link is useful when the automatic path fails
-      log('Manual Scene Viewer link clicked');
-    });
-
-    // Primary AR launch
-    btnAR.addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      log('AR button clicked — checking capabilities...');
-
-      try {
-        // If model-viewer can activate AR, let it (it will choose Quick Look / Scene Viewer / WebXR)
-        if (mv.canActivateAR) {
-          log('Calling model-viewer.activateAR()');
-          await mv.activateAR();
-          return;
-        }
-
-        // If on iOS, use the Quick Look anchor (some in-app browsers still block this)
-        if (isIOS()) {
-          if (platformArLink && platformArLink.href) {
-            log('Opening iOS Quick Look via anchor');
-            platformArLink.click();
-            return;
-          }
-        }
-
-        // WebXR support check
-        if (navigator.xr && navigator.xr.isSessionSupported) {
-          try {
-            const supported = await navigator.xr.isSessionSupported('immersive-ar');
-            log('navigator.xr immersive-ar supported:', supported);
-            if (supported) {
-              // model-viewer handles this, but call activateAR just in case
-              await mv.activateAR();
-              return;
-            }
-          } catch (e) {
-            log('XR isSessionSupported() error:', e?.message || e);
-          }
-        }
-
-        // Android fallback: open Scene Viewer URL (https)
-        if (isAndroid() && glb) {
-          const url = sceneViewerUrlFor(glb, mv.getAttribute('alt'));
-          log('Opening Scene Viewer (https) fallback: ' + url);
-          // Open in _self to keep gesture context
-          window.open(url, '_self');
-          return;
-        }
-
-        log('AR not available on this device/browser. Run diagnostics or use a supported browser (Safari on iOS, Chrome on Android with ARCore).');
-      } catch (err) {
-        log('AR launch error: ' + (err?.message || err));
-        // final fallback: Android intent
-        if (isAndroid() && glb) {
-          const intent = sceneViewerIntent(glb, mv.getAttribute('alt'));
-          log('Falling back to intent URL: ' + intent);
-          window.location.href = intent;
-        }
+    mv.addEventListener('load', () => {
+      animations = mv.availableAnimations;
+      console.log("Animations found:", animations);
+      if (animations.length > 0) {
+        playAnimation(0);
       }
     });
 
-    // model-viewer events
-    mv.addEventListener('ar-status', (e) => {
-      const { status, reason } = e.detail || {};
-      log('ar-status: ' + status + (reason ? (' | reason: ' + reason) : ''));
-      if (status === 'session-started' && navigator.vibrate) navigator.vibrate(10);
-    });
+    function playAnimation(index) {
+      currentIndex = index;
+      const animName = animations[currentIndex];
+      console.log("Playing animation:", animName);
 
-    // Auto-run a quick diagnostics so user sees immediate feedback
-    await runDiagnostics();
-  })();
-</script>
+      // Play animation with crossfade
+      mv.play({ animationName: animName, repetitions: 1 });
+
+      // Play matching audio if available
+      if (animationSounds[animName]) {
+        audio.src = animationSounds[animName];
+        audio.currentTime = 0;
+        audio.play();
+      }
+
+      isPlaying = true;
+
+      // Schedule next animation after current ends
+      const duration = mv.animationDuration * 1000; // ms
+      setTimeout(() => {
+        fadeOutAudio(() => {
+          const nextIndex = (currentIndex + 1) % animations.length;
+          playAnimation(nextIndex);
+        });
+      }, duration - 500); // subtract crossfade time
+    }
+
+    function fadeOutAudio(callback) {
+      let vol = 1.0;
+      const fade = setInterval(() => {
+        vol -= 0.1;
+        if (vol <= 0) {
+          clearInterval(fade);
+          audio.pause();
+          audio.currentTime = 0;
+          callback();
+        } else {
+          audio.volume = vol;
+        }
+      }, 50);
+    }
+  </script>
 </body>
 </html>
