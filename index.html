@@ -4,8 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tap‑to‑Place AR (iPhone + Android)</title>
-  <!-- model-viewer: high-level Web Component that supports iOS Quick Look + Android Scene Viewer + WebXR -->
+  <!-- model-viewer: WebXR + Android Scene Viewer + iOS Quick Look -->
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <!-- Preload USDZ so iOS can fetch it with the right MIME type -->
+  <link rel="preload" as="fetch" href="/assets/model.usdz" type="model/vnd.usdz+zip" crossorigin>
   <style>
     html, body { height: 100%; margin: 0; }
     body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#0b0c10; color:#eee; }
@@ -15,19 +17,19 @@
 
     model-viewer { width: 100%; height: 100vh; --poster-color: #0b0c10; }
 
-    /* Custom AR button inside model-viewer */
-    .arButton { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 2; }
-    .arButton button { 
+    .controls { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 3; display:flex; gap:10px; }
+    .controls button { 
       padding: 12px 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18);
       background: rgba(255,255,255,.08); color: #fff; font-weight: 600; letter-spacing: .2px; 
       box-shadow: 0 10px 24px rgba(0,0,0,.35); backdrop-filter: blur(8px);
     }
-    .arButton button:active { transform: translateY(1px); }
+    .controls button:active { transform: translateY(1px); }
 
-    /* Instruction chip appears only while AR session is active */
     .hint { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 3; display: none; }
     .hint .chip { background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.15); padding: 10px 14px; border-radius: 14px; }
     model-viewer[ar-status="session-started"] ~ .hint { display: block; }
+
+    .diag { position: fixed; right: 10px; bottom: 10px; font-size: 12px; color:#cbd5e1; opacity:.85; }
 
     footer { text-align: center; padding: 10px; color: #9aa1a9; font-size: 12px; }
     a { color: #b5cdfb; }
@@ -36,17 +38,9 @@
 <body>
   <div class="wrap">
     <header>
-      <div class="badge">Tap the AR button → move your phone to find a surface → tap to place</div>
+      <div class="badge">Tap AR → move to find a surface → tap to place</div>
     </header>
 
-    <!--
-      Replace src/ios-src with your assets:
-        - src: GLB/GLTF for Android (Scene Viewer/WebXR)
-        - ios-src: USDZ for iPhone (Quick Look)
-      Tips:
-        - Use ar-placement="floor" (or "wall") depending on your scenario
-        - ar-scale="fixed" prevents pinch-resizing; use "auto" to allow it
-    -->
     <model-viewer
       id="viewer"
       src="/assets/model.glb"
@@ -65,41 +59,61 @@
       tone-mapping="aces"
       interaction-prompt="auto"
     >
-      <!-- Custom button (shows automatically when AR is available) -->
-      <div slot="ar-button" class="arButton">
-        <button type="button">View in your space</button>
-      </div>
-
-      <!-- iOS Quick Look fallbacks: title + subtitle in USDZ banner (optional) -->
-      <meta name="apple-mobile-web-app-capable" content="yes">
-      <a rel="ar" href="/assets/model.usdz" slot="ar" aria-label="Open in AR"></a>
+      <!-- Apple Quick Look anchor (used by iOS). href is set from ios-src at runtime. -->
+      <a id="iosLink" rel="ar" slot="ar" href="/assets/model.usdz" aria-label="Open in AR"></a>
     </model-viewer>
 
-    <!-- On-screen hint while AR session is active -->
-    <div class="hint"><div class="chip">Move to scan the floor, then tap to place. Drag to reposition; two‑finger rotate.</div></div>
+    <!-- Explicit AR button that calls activateAR() (helps with iOS gesture requirements) -->
+    <div class="controls">
+      <button id="btnAR" type="button">View in your space</button>
+    </div>
 
-    <footer>Built with <code>&lt;model-viewer&gt;</code>. Replace <code>/assets/model.glb</code> + <code>/assets/model.usdz</code> with your files. Supports Android Scene Viewer + iOS Quick Look + WebXR.</footer>
+    <div class="hint"><div class="chip">Move to scan the floor, then tap to place. Drag to reposition; two‑finger rotate.</div></div>
+    <div class="diag" id="diag"></div>
+
+    <footer>Replace <code>/assets/model.glb</code> + <code>/assets/model.usdz</code> with your files. Works on Android (Scene Viewer/WebXR) and iPhone (Quick Look/WebXR).</footer>
   </div>
 
   <script>
-    // Optional: tweak AR behavior for iOS vs Android/WebXR
     const mv = document.getElementById('viewer');
+    const btnAR = document.getElementById('btnAR');
+    const iosLink = document.getElementById('iosLink');
+    const diag = document.getElementById('diag');
 
-    // When AR session starts, show a short vibration (supports iOS 16+ and Android)
+    // Ensure iOS link points to the same USDZ as ios-src and add Quick Look params
+    const usdz = mv.getAttribute('ios-src');
+    if (usdz) {
+      const absolute = new URL(usdz, location.href).href;
+      // Optional Quick Look params: disallow pinch-scaling + custom label
+      iosLink.href = absolute + '#allowsContentScaling=0&callToAction=View%20in%20your%20space';
+    }
+
+    function log(s) { diag.textContent = s; }
+
+    // Pressing our button always uses model‑viewer API (more reliable across browsers)
+    btnAR.addEventListener('click', async () => {
+      try {
+        if (!mv.canActivateAR) {
+          log('AR not available here. Try Safari (iOS) or Chrome (Android).');
+          return;
+        }
+        await mv.activateAR();
+      } catch (err) {
+        log('activateAR() failed: ' + (err?.message || err));
+      }
+    });
+
+    // Useful diagnostics
     mv.addEventListener('ar-status', (e) => {
-      if (e.detail.status === 'session-started' && navigator.vibrate) {
-        navigator.vibrate(10);
-      }
+      const { status, reason } = e.detail || {};
+      log('ar-status: ' + status + (reason ? (' | reason: ' + reason) : ''));
+      if (status === 'session-started' && navigator.vibrate) navigator.vibrate(10);
     });
 
-    // Example: programmatic placement on first tap in WebXR (advanced)
-    // model-viewer already supports tap‑to‑place, but this shows how to hook into taps
-    mv.addEventListener('click', (ev) => {
-      if (mv.getAttribute('ar-status') === 'session-started') {
-        // Custom logic here (e.g., play sound, analytics)
-        // console.log('Tapped to place at', ev.clientX, ev.clientY);
-      }
-    });
+    // Warn if embedded in an iframe without permissions (iOS blocks Quick Look in some in-app browsers)
+    if (window !== window.top) {
+      log('This page is in an iframe. iOS may block AR unless the iframe allows camera & xr-spatial-tracking.');
+    }
   </script>
 </body>
 </html>
